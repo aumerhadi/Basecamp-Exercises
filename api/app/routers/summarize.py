@@ -8,7 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 
 from ..db import get_connection
-from ..models import SummarizeJob, SummarizeJobCreated, SummarizeJobSummary
+from ..models import (
+    SummarizeJob,
+    SummarizeJobCreated,
+    SummarizeJobSummary,
+    SummarySubmission,
+)
 from ..repository import SummarizeQueueRepository
 
 router = APIRouter(prefix="/summarize", tags=["summarize"])
@@ -50,6 +55,29 @@ def enqueue_summarization(
             detail="Expected a non-empty JSON array of e-mail ids",
         )
     return SummarizeJobCreated(id=queue.enqueue(email_ids))
+
+
+@router.post(
+    "/{job_id}",
+    response_model=SummarizeJobSummary,
+    summary="Submit a job's summary",
+    description=(
+        "Writes the finished summary onto a queued job, which takes it out of"
+        " `GET /summarize`. Submitting again replaces the text, so a corrected"
+        " summary needs no new job."
+    ),
+    responses={status.HTTP_404_NOT_FOUND: {"description": "No job with that id"}},
+)
+def submit_summary(
+    queue: Queue, job_id: JobId, submission: SummarySubmission
+) -> SummarizeJobSummary:
+    job = queue.submit_summary(job_id, submission.summary)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Summarization {job_id} not found",
+        )
+    return SummarizeJobSummary(id=job.id, summary=job.summary)
 
 
 @router.get(

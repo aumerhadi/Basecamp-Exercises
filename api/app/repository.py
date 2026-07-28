@@ -148,6 +148,21 @@ class SummarizeQueueRepository:
         ).fetchone()
         return _row_to_job(row) if row is not None else None
 
+    def submit_summary(self, job_id: int, summary: str) -> SummarizeJob | None:
+        """Write `summary` onto a job, taking it out of the pending listing.
+
+        Returns the updated job, or `None` when there is no job with that id.
+        """
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE summarize_queue SET summary = ? WHERE id = ?", (summary, job_id)
+            )
+        # rowcount counts rows matched, so re-submitting identical text still
+        # reports a hit rather than looking like a missing job.
+        if cursor.rowcount == 0:
+            return None
+        return self.get(job_id)
+
 
 AGENDA_COLUMNS = "day, date, email_ids, meeting, support"
 

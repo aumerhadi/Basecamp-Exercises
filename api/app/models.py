@@ -117,6 +117,28 @@ class SummarizeJobSummary(BaseModel):
     )
 
 
+class SummarySubmission(BaseModel):
+    """Body of `POST /summarize/{id}` — the finished summary."""
+
+    summary: str = Field(
+        min_length=1,
+        examples=["Three critical bugs and one release sign-off need attention."],
+    )
+
+    @model_validator(mode="after")
+    def _reject_blank(self) -> SummarySubmission:
+        """A blank summary would leave the job pending — refuse it, and trim.
+
+        Trailing whitespace is common in generated text and carries no meaning
+        here, so the stored value is the stripped one.
+        """
+        stripped = self.summary.strip()
+        if not stripped:
+            raise ValueError("summary must not be blank")
+        self.summary = stripped
+        return self
+
+
 class Agenda(BaseModel):
     """The plan of one day — what `GET /agenda` returns."""
 

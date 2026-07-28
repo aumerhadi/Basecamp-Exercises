@@ -69,6 +69,7 @@ EMAILS_DB_PATH=/tmp/scratch.db uvicorn app.main:app --port 8000
 | POST   | `/summarize`        | Queue a summarization job for a list of e-mail ids; returns its id. |
 | GET    | `/summarize`        | Queued jobs still waiting for a summary. Trailing slash also works. |
 | GET    | `/summarize/{id}`   | That job's `summary`; `404` if the id is unknown.              |
+| POST   | `/summarize/{id}`   | Submit that job's summary, taking it out of the pending list.  |
 | POST   | `/agenda`           | Store the plan of a day. One plan per day; storing again replaces it. |
 | GET    | `/agenda`           | Today's plan. Trailing slash also works.                      |
 | GET    | `/agenda/{day}`     | The plan of one day, `DD-Mon-YYYY` or `YYYY-MM-DD`; `404` if none. |
@@ -161,8 +162,24 @@ lists exactly those — a job counts as pending while `summary` is NULL *or* the
 empty string, so a worker cannot make one vanish by writing `''`. Ids are not
 checked against the `emails` table at enqueue time.
 
-Nothing drains the queue yet: writing the summaries is the missing half, and
-until it exists `GET /summarize/{id}` keeps returning `null` for a known id.
+The other half is submitting the result, which is how a job leaves the queue:
+
+```bash
+curl -X POST http://localhost:8000/summarize/1 \
+     -H 'Content-Type: application/json' -d '{"summary": "Two bugs need triage."}'
+# 200 {"id":1,"summary":"Two bugs need triage."}
+```
+
+- **Submitting again replaces the text**, so a corrected summary needs no new
+  job. An unknown id is a `404`.
+- **A blank summary is a `422`.** Storing `""` or whitespace would leave the job
+  in the pending listing, which reads as "nothing was submitted"; the stored
+  value is stripped, since trailing whitespace in generated text means nothing
+  here.
+
+Nothing calls this endpoint automatically yet — no worker polls `GET /summarize`
+and no summariser generates the text (`app/summarizer.py` is still a stub), so
+for now the queue is drained by whatever you point at it.
 
 | Column       | Type                          |
 | ------------ | ----------------------------- |
