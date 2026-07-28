@@ -69,6 +69,9 @@ EMAILS_DB_PATH=/tmp/scratch.db uvicorn app.main:app --port 8000
 | POST   | `/summarize`        | Queue a summarization job for a list of e-mail ids; returns its id. |
 | GET    | `/summarize`        | Queued jobs still waiting for a summary. Trailing slash also works. |
 | GET    | `/summarize/{id}`   | That job's `summary`; `404` if the id is unknown.              |
+| POST   | `/agenda`           | Store the plan of a day. One plan per day; storing again replaces it. |
+| GET    | `/agenda`           | Today's plan. Trailing slash also works.                      |
+| GET    | `/agenda/{day}`     | The plan of one day, `DD-Mon-YYYY` or `YYYY-MM-DD`; `404` if none. |
 | GET    | `/health`           | Liveness probe.                                               |
 
 `/emails/summarize` is registered before `/emails/{id}` so the path parameter
@@ -172,15 +175,61 @@ until it exists `GET /summarize/{id}` keeps returning `null` for a known id.
 reads the set back whole; `created_at` is ISO for the same sortability reason as
 `emails.sent_at`.
 
+## Agenda
+
+The plan of one day: the e-mails to deal with first, plus free-text meeting and
+support notes. Stored in its own `agenda_queue` table.
+
+```bash
+curl -X POST http://localhost:8000/agenda -H 'Content-Type: application/json' -d '{
+  "top": [3, 1, 2],
+  "meeting": "Standup 10:00, design review 15:00",
+  "support": "On call: Dana until 18:00",
+  "date": "2026-07-28T09:00:00"
+}'
+# 201 {"top":[{"id":3,...},{"id":1,...},{"id":2,...}],"meeting":"...","support":"...","date":"2026-07-28T09:00:00"}
+
+curl http://localhost:8000/agenda                 # today's plan
+curl http://localhost:8000/agenda/28-Jul-2026     # a given day — YYYY-MM-DD works too
+```
+
+- **`top` holds e-mail ids or whole e-mail objects.** Either way only the ids are
+  stored, and the e-mails are read back from the `emails` table, so an agenda
+  never carries a stale copy of a subject or body. Every id must already be in
+  the inbox — an unknown one is a `422` naming it.
+- **Order is preserved** exactly as posted, unlike `GET /emails`, which sorts by
+  date; a repeated id keeps its first position and is stored once.
+- **One plan per day** — `date` is a full timestamp, but the day it falls on is
+  unique, so posting again for that day replaces the plan rather than adding a
+  second one.
+- **`date` is optional** and defaults to now, which makes a body without it
+  today's plan. `GET /agenda` likewise means today by the server's local clock.
+- A day with no plan stored is a `404`, and an unparseable day is a `422`.
+
+| Column       | Type                                        |
+| ------------ | ------------------------------------------- |
+| `id`         | INTEGER, auto-assigned rowid                 |
+| `day`        | TEXT — `YYYY-MM-DD`, UNIQUE, derived from `date` |
+| `date`       | TEXT — ISO-8601 timestamp as posted          |
+| `email_ids`  | TEXT — JSON array of ids                     |
+| `meeting`    | TEXT                                         |
+| `support`    | TEXT                                         |
+| `created_at` | TEXT — ISO-8601 UTC, when the day's plan was first stored |
+
+`day` exists because `date` is a timestamp: lookups and the one-per-day
+constraint need the calendar day on its own. Replacing a plan leaves
+`created_at` alone.
+
 ## Layout
 
 ```
 app/
   main.py            FastAPI app, lifespan schema bootstrap, CORS (http://localhost:3000)
   db.py              SQLite path, connection factory, schema
-  models.py          Email / EmailSummary / ImportResult / SummarizeJob contract
-  repository.py      SQL queries and upsert, for both tables
+  models.py          Email / EmailSummary / ImportResult / SummarizeJob / Agenda contract
+  repository.py      SQL queries and upserts, one class per table
   summarizer.py      summarization stub
   routers/emails.py     /emails routes
   routers/summarize.py  /summarize queue routes
+  routers/agenda.py     /agenda routes
 ```

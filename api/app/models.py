@@ -115,3 +115,41 @@ class SummarizeJobSummary(BaseModel):
         default=None,
         description="Generated summary; null or empty while the job is pending.",
     )
+
+
+class Agenda(BaseModel):
+    """The plan of one day — what `GET /agenda` returns."""
+
+    top: list[Email] = Field(description="E-mails to deal with first, in the order stored.")
+    meeting: str = Field(examples=["Standup 10:00, design review 15:00"])
+    support: str = Field(examples=["On call: Dana until 18:00"])
+    date: datetime = Field(examples=["2026-07-28T09:00:00"])
+
+
+class AgendaCreate(BaseModel):
+    """Body of `POST /agenda`."""
+
+    top: list[Email | int] = Field(
+        default_factory=list,
+        description=(
+            "E-mails to deal with first, as full objects or as bare ids — only the ids are"
+            " stored, and the e-mails are read back from the inbox."
+        ),
+        examples=[[1, 2, 3]],
+    )
+    meeting: str = Field(examples=["Standup 10:00, design review 15:00"])
+    support: str = Field(examples=["On call: Dana until 18:00"])
+    date: datetime | None = Field(
+        default=None,
+        description="Day this plan is for. Defaults to now, i.e. today's plan.",
+        examples=["2026-07-28T09:00:00"],
+    )
+
+    @property
+    def email_ids(self) -> list[int]:
+        """Ids named in `top`, keeping the first occurrence of a repeated id."""
+        # dict preserves insertion order and collapses duplicates in one pass.
+        ordered: dict[int, None] = {}
+        for item in self.top:
+            ordered.setdefault(item if isinstance(item, int) else item.id, None)
+        return list(ordered)

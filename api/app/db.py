@@ -36,6 +36,21 @@ CREATE TABLE IF NOT EXISTS summarize_queue (
 -- Partial index: the pending listing is the only hot query over this table.
 CREATE INDEX IF NOT EXISTS idx_summarize_queue_pending
     ON summarize_queue (id) WHERE summary IS NULL OR summary = '';
+
+CREATE TABLE IF NOT EXISTS agenda_queue (
+    id         INTEGER PRIMARY KEY,
+    -- One plan per calendar day. `day` is YYYY-MM-DD derived from `date`: it is
+    -- what lookups match on and what makes the day unique, while `date` keeps
+    -- the full timestamp the contract asks for. UNIQUE indexes it for free.
+    day        TEXT    NOT NULL UNIQUE,
+    date       TEXT    NOT NULL,
+    -- JSON array of e-mail ids, as in summarize_queue; the e-mails themselves
+    -- are resolved from the emails table on read.
+    email_ids  TEXT    NOT NULL,
+    meeting    TEXT    NOT NULL,
+    support    TEXT    NOT NULL,
+    created_at TEXT    NOT NULL
+);
 """
 
 
