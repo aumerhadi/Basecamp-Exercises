@@ -24,6 +24,18 @@ CREATE TABLE IF NOT EXISTS emails (
     sent_at       TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_emails_sent_at ON emails (sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS summarize_queue (
+    id         INTEGER PRIMARY KEY,
+    -- JSON array of e-mail ids: SQLite has no list type, and the queue only
+    -- ever reads the set back as a whole.
+    email_ids  TEXT    NOT NULL,
+    summary    TEXT,
+    created_at TEXT    NOT NULL
+);
+-- Partial index: the pending listing is the only hot query over this table.
+CREATE INDEX IF NOT EXISTS idx_summarize_queue_pending
+    ON summarize_queue (id) WHERE summary IS NULL OR summary = '';
 """
 
 
