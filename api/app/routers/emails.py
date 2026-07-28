@@ -39,8 +39,9 @@ PriorityFilter = Annotated[Priority | None, Query(description="Keep only this pr
     summary="Import e-mails from a JSON file",
     description=(
         "Upload a JSON file holding an array of e-mails (or a single e-mail object) in the"
-        " standard data contract. Existing ids are overwritten, so re-importing the same"
-        " file is idempotent. The whole file is validated before anything is written."
+        " standard data contract. Items carrying an id overwrite that id, so re-importing"
+        " such a file is idempotent; items without one are appended under fresh ids. The"
+        " whole file is validated before anything is written."
     ),
     responses={
         status.HTTP_400_BAD_REQUEST: {"description": "The upload is not valid JSON"},
@@ -73,10 +74,23 @@ async def import_emails(
             detail="Expected a JSON array of e-mails, or a single e-mail object",
         )
 
+    # `id` is optional in an export: items without one are appended after both
+    # the highest id in the table and the highest id named in this file, so an
+    # explicit id later in the file cannot be overwritten by an assigned one.
+    explicit = [
+        item["id"]
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("id"), int)
+    ]
+    next_id = max([repo.max_id(), *explicit], default=0) + 1
+
     # Validate everything up front so a bad item late in the file writes nothing.
     emails: list[Email] = []
     errors: list[dict[str, Any]] = []
     for index, item in enumerate(items):
+        if isinstance(item, dict) and item.get("id") is None:
+            item = {**item, "id": next_id}
+            next_id += 1
         try:
             emails.append(Email.model_validate(item))
         except ValidationError as error:

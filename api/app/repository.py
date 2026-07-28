@@ -76,6 +76,12 @@ class EmailRepository:
         ).fetchall()
         return [_row_to_email(row) for row in rows]
 
+    def max_id(self) -> int:
+        """Highest id in the table, or 0 when it is empty."""
+        return self._connection.execute(
+            "SELECT COALESCE(MAX(id), 0) AS value FROM emails"
+        ).fetchone()["value"]
+
     def get(self, email_id: int) -> Email | None:
         row = self._connection.execute(
             f"SELECT {COLUMNS} FROM emails WHERE id = ?", (email_id,)

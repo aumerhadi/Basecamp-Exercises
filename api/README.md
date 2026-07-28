@@ -3,14 +3,60 @@
 FastAPI backend over an inbox of e-mails, stored in SQLite and populated by
 importing a JSON file.
 
-## Run
+## Running the server
+
+Requires Python 3.10+ for the `X | None` annotations FastAPI resolves at import
+time; developed against 3.13. All commands run from this `api/` folder —
+`app.main` is resolved relative to the working directory.
+
+**1. Activate an environment.** The repo already ships one at the root, which is
+the simplest option:
+
+```bash
+source ../.venv/Scripts/activate     # Windows
+source ../.venv/bin/activate         # macOS / Linux
+```
+
+Or create one just for the API: `python -m venv .venv && source .venv/Scripts/activate`.
+
+**2. Install the dependencies.**
 
 ```bash
 pip install -r requirements.txt
+```
+
+**3. Start uvicorn.**
+
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-Interactive docs: <http://localhost:8000/docs>
+`--reload` restarts on file changes; drop it outside development. On startup the
+app creates `../data/emails.db` and its schema if they are not there yet, so the
+first run needs no migration step.
+
+**4. Check it is up.**
+
+```bash
+curl http://localhost:8000/health      # {"status":"ok"}
+curl http://localhost:8000/emails      # [] until you import
+```
+
+Interactive docs — including a file picker for the import endpoint — are at
+<http://localhost:8000/docs>. Stop the server with `Ctrl-C`.
+
+A fresh database is empty; see [Import](#import) below for getting e-mails in.
+
+### Configuration
+
+| Variable         | Default                   | Purpose                                  |
+| ---------------- | ------------------------- | ---------------------------------------- |
+| `EMAILS_DB_PATH` | `../data/emails.db`       | Where the SQLite file lives.              |
+| `CORS_ORIGINS`   | `http://localhost:3000`   | Comma-separated allowed origins. The default matches the Next.js client in `../client`. |
+
+```bash
+EMAILS_DB_PATH=/tmp/scratch.db uvicorn app.main:app --port 8000
+```
 
 ## Endpoints
 
@@ -44,7 +90,8 @@ does not swallow it.
 - `priority` is one of `low` / `medium` / `critical`.
 - `date` is `DD-Mon-YYYY`, `time` is 24-hour `HH:MM`.
 - `highPriority` is optional — when absent it is derived as `priority == "critical"`.
-- `id` is **required**: it is the key the importer upserts on.
+- `id` is assigned by the API and always present in responses. It is optional on
+  import — see below.
 
 ## Import
 
@@ -59,6 +106,10 @@ accepted). Behaviour worth knowing:
 - **Upsert by id** — an id already in the database is overwritten, so importing
   the same file twice is idempotent. Duplicate ids *within* one file resolve to
   the last occurrence.
+- **`id` may be omitted**, as it is in a plain mail export. Those items are
+  appended under fresh ids, counting up from the highest id already in the table
+  and the highest one named in the file. Note the consequence: without ids there
+  is nothing to match on, so re-importing the same file adds the e-mails again.
 - **All or nothing** — every item is validated before anything is written. One
   bad item means a `422` naming its index and field, and no rows change.
 - `400` for malformed JSON, `413` above 5 MB.
