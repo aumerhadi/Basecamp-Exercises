@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+import json
+import sqlite3
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
+from pydantic import ValidationError
 
-from ..models import Email, EmailSummary, Priority
-from ..repository import EmailRepository, get_repository
+from ..db import get_connection
+from ..models import Email, EmailSummary, ImportResult, Priority
+from ..repository import EmailRepository
 from ..summarizer import summarize
 
 router = APIRouter(prefix="/emails", tags=["emails"])
+
+MAX_IMPORT_BYTES = 5 * 1024 * 1024
+
+
+def get_repository(
+    connection: Annotated[sqlite3.Connection, Depends(get_connection)],
+) -> EmailRepository:
+    return EmailRepository(connection)
+
 
 Repo = Annotated[EmailRepository, Depends(get_repository)]
 SearchQuery = Annotated[
@@ -18,6 +31,83 @@ SearchQuery = Annotated[
     Query(description="Case-insensitive search over subject and body.", examples=["bug"]),
 ]
 PriorityFilter = Annotated[Priority | None, Query(description="Keep only this priority.")]
+
+
+@router.post(
+    "/import",
+    response_model=ImportResult,
+    summary="Import e-mails from a JSON file",
+    description=(
+        "Upload a JSON file holding an array of e-mails (or a single e-mail object) in the"
+        " standard data contract. Items carrying an id overwrite that id, so re-importing"
+        " such a file is idempotent; items without one are appended under fresh ids. The"
+        " whole file is validated before anything is written."
+    ),
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "The upload is not valid JSON"},
+        status.HTTP_413_CONTENT_TOO_LARGE: {"description": "File over 5 MB"},
+    },
+)
+async def import_emails(
+    repo: Repo,
+    file: Annotated[UploadFile, File(description="JSON file of e-mails.")],
+) -> ImportResult:
+    payload = await file.read(MAX_IMPORT_BYTES + 1)
+    if len(payload) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File exceeds the {MAX_IMPORT_BYTES // (1024 * 1024)} MB import limit",
+        )
+
+    try:
+        parsed: Any = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Uploaded file is not valid JSON: {error}",
+        ) from error
+
+    items = [parsed] if isinstance(parsed, dict) else parsed
+    if not isinstance(items, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Expected a JSON array of e-mails, or a single e-mail object",
+        )
+
+    # `id` is optional in an export: items without one are appended after both
+    # the highest id in the table and the highest id named in this file, so an
+    # explicit id later in the file cannot be overwritten by an assigned one.
+    explicit = [
+        item["id"]
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("id"), int)
+    ]
+    next_id = max([repo.max_id(), *explicit], default=0) + 1
+
+    # Validate everything up front so a bad item late in the file writes nothing.
+    emails: list[Email] = []
+    errors: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if isinstance(item, dict) and item.get("id") is None:
+            item = {**item, "id": next_id}
+            next_id += 1
+        try:
+            emails.append(Email.model_validate(item))
+        except ValidationError as error:
+            errors.extend(
+                {"loc": ["body", index, *problem["loc"]], "msg": problem["msg"]}
+                for problem in error.errors()
+            )
+    if errors:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=errors)
+
+    inserted, updated = repo.upsert_many(emails)
+    return ImportResult(
+        received=len(emails),
+        inserted=inserted,
+        updated=updated,
+        email_ids=[email.id for email in emails],
+    )
 
 
 # Registered before `/{email_id}` — otherwise the path parameter swallows

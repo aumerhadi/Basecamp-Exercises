@@ -1,0 +1,137 @@
+[
+  {
+    "from": "sarah.jenkins@acmeretail.com",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "URGENT: Checkout integration broken in production",
+    "body": "We're seeing 500 errors on the checkout API during our Black Friday load test. This is blocking our go-live tomorrow. Can we get on a call in the next hour? This is a top priority for us.",
+    "priority": "critical",
+    "date": "28-Jul-2026",
+    "time": "08:12"
+  },
+  {
+    "from": "mrodriguez@finhub.io",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Contract renewal blocked - need your sign-off today",
+    "body": "Our legal team needs written confirmation on the data-residency questions we sent last week before they'll approve the renewal. If we don't hear back by end of day, the renewal slips to next quarter.",
+    "priority": "critical",
+    "date": "28-Jul-2026",
+    "time": "09:05"
+  },
+  {
+    "from": "priya.desai@vertexlogistics.com",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Demo tomorrow is broken - please help",
+    "body": "Our sandbox environment is throwing auth errors and we have an executive demo scheduled tomorrow morning. Please advise on a fix or workaround as soon as you can today.",
+    "priority": "critical",
+    "date": "28-Jul-2026",
+    "time": "11:40"
+  },
+  {
+    "from": "jordan.lee@nimbuscloud.dev",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Sync on Q3 roadmap this week?",
+    "body": "Can we grab 30 minutes this week to align on Q3 roadmap priorities? I need our input before the planning doc is due Friday. I'm free Wednesday or Thursday afternoon.",
+    "priority": "medium",
+    "date": "28-Jul-2026",
+    "time": "09:30"
+  },
+  {
+    "from": "maria.santos@nimbuscloud.dev",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "1:1 catch-up - performance review prep",
+    "body": "Let's find time next week for a 1:1 to prep for the performance review cycle. Send me a couple of slots that work for you and I'll send an invite.",
+    "priority": "low",
+    "date": "28-Jul-2026",
+    "time": "13:15"
+  },
+  {
+    "from": "devon.brooks@partnerco.com",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Meeting request: API integration kickoff",
+    "body": "We'd like to schedule a kickoff call to discuss integrating with your public API. Would Tuesday 2pm or Wednesday 10am work on your end? Looking forward to getting started.",
+    "priority": "medium",
+    "date": "28-Jul-2026",
+    "time": "14:02"
+  },
+  {
+    "from": "alerts@pagerduty-nimbus.io",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "P1 ALERT: Production API down - 500 errors spiking",
+    "body": "Automated alert: error rate on the production API gateway has spiked to 80% since 09:14 UTC. Customer-facing endpoints are affected. On-call engineer has been paged.",
+    "priority": "critical",
+    "date": "28-Jul-2026",
+    "time": "09:16"
+  },
+  {
+    "from": "ops-oncall@nimbuscloud.dev",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Database failover in progress - checkout unavailable",
+    "body": "Primary database failed over at 10:02. Checkout and billing endpoints are currently unavailable. Estimated revenue impact is $2,000/minute. Need engineering eyes on this immediately.",
+    "priority": "critical",
+    "date": "28-Jul-2026",
+    "time": "10:04"
+  },
+  {
+    "from": "status@stripe-billing-monitor.com",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Payment gateway outage impacting subscription renewals",
+    "body": "Webhook delivery failures are causing failed subscription renewals for approximately 1,200 accounts. This requires engineering review to prevent further billing impact.",
+    "priority": "critical",
+    "date": "28-Jul-2026",
+    "time": "10:47"
+  },
+  {
+    "from": "qa.team@nimbuscloud.dev",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Bug: Search returns zero results for multi-word queries",
+    "body": "QA found that the search feature returns no results whenever a query has more than two words. Filed as NIMBUS-4821. Not customer-blocking yet but worth fixing before the next release.",
+    "priority": "medium",
+    "date": "28-Jul-2026",
+    "time": "12:20"
+  },
+  {
+    "from": "emily.wong@nimbuscloud.dev",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Issue: Invoice totals off by rounding error",
+    "body": "The invoice page is showing totals off by $0.01 on line items that include tax. Low impact but noticeable to customers who check their math. Can you take a look this sprint?",
+    "priority": "low",
+    "date": "28-Jul-2026",
+    "time": "15:10"
+  },
+  {
+    "from": "support@nimbuscloud.dev",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Customer-reported bug: Login button unresponsive on Safari",
+    "body": "Forwarding a support ticket - a customer reports the login button doesn't respond on Safari. Current workaround is to use Chrome. Please investigate when you get a chance.",
+    "priority": "medium",
+    "date": "28-Jul-2026",
+    "time": "16:35"
+  },
+  {
+    "from": "deals@cloudsaver-ads.net",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Cut your AWS bill by 50% - act now!",
+    "body": "Limited time offer! Our cost-optimization tool can slash your cloud spend in half. Sign up today and get a free audit of your infrastructure. Click here to claim your discount.",
+    "priority": "low",
+    "date": "28-Jul-2026",
+    "time": "07:50"
+  },
+  {
+    "from": "promo@linkedin-boost.co",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "You've been selected for a free LinkedIn growth trial",
+    "body": "Congratulations! You've been selected for a free trial of our LinkedIn growth tool. Boost your profile views and connections in just 7 days. Start your free trial now.",
+    "priority": "low",
+    "date": "28-Jul-2026",
+    "time": "12:55"
+  },
+  {
+    "from": "newsletter@techgadgetsdaily.com",
+    "to": "alex.chen@nimbuscloud.dev",
+    "subject": "Top 10 gadgets every developer needs in 2026",
+    "body": "Check out our roundup of the top 10 gadgets every developer needs this year, from mechanical keyboards to standing desks. Plus, exclusive discounts for our newsletter subscribers.",
+    "priority": "low",
+    "date": "28-Jul-2026",
+    "time": "18:22"
+  }
+]

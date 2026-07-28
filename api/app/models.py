@@ -62,6 +62,17 @@ class Email(BaseModel):
         return needle in self.subject.casefold() or needle in self.body.casefold()
 
 
+class ImportResult(BaseModel):
+    """Result of `POST /emails/import`."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    received: int = Field(description="E-mails found in the uploaded file.")
+    inserted: int = Field(description="Ids that did not exist before.")
+    updated: int = Field(description="Ids that already existed and were overwritten.")
+    email_ids: list[int] = Field(alias="emailIds")
+
+
 class EmailSummary(BaseModel):
     """Result of `GET /emails/summarize`."""
 
