@@ -1,11 +1,13 @@
-"""SQLite-backed e-mail store."""
+"""SQLite-backed stores: the e-mail table and the summarization queue."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterable, Sequence
+from datetime import datetime, timezone
 
-from .models import Email, Priority
+from .models import Email, Priority, SummarizeJob
 
 COLUMNS = (
     "id, sender, recipient, subject, body, priority, date, time, high_priority, sent_at"
@@ -107,6 +109,53 @@ class EmailRepository:
 
         updated = len(existing)
         return (len(incoming) - updated, updated)
+
+
+QUEUE_COLUMNS = "id, email_ids, summary, created_at"
+
+# NULL and '' both count as "not summarised yet": nothing forbids a worker from
+# writing an empty string, and a pending job must not disappear from the queue.
+PENDING = "(summary IS NULL OR summary = '')"
+
+
+class SummarizeQueueRepository:
+    """Queries over the `summarize_queue` table. One instance per connection."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def enqueue(self, email_ids: Sequence[int]) -> int:
+        """Queue a summarization job. Returns its id."""
+        created_at = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            cursor = self._connection.execute(
+                "INSERT INTO summarize_queue (email_ids, summary, created_at)"
+                " VALUES (?, NULL, ?)",
+                (json.dumps(list(email_ids)), created_at),
+            )
+        return int(cursor.lastrowid)
+
+    def list_pending(self) -> list[SummarizeJob]:
+        """Jobs whose `summary` is still empty, oldest first."""
+        rows = self._connection.execute(
+            f"SELECT {QUEUE_COLUMNS} FROM summarize_queue WHERE {PENDING} ORDER BY id"
+        ).fetchall()
+        return [_row_to_job(row) for row in rows]
+
+    def get(self, job_id: int) -> SummarizeJob | None:
+        row = self._connection.execute(
+            f"SELECT {QUEUE_COLUMNS} FROM summarize_queue WHERE id = ?", (job_id,)
+        ).fetchone()
+        return _row_to_job(row) if row is not None else None
+
+
+def _row_to_job(row: sqlite3.Row) -> SummarizeJob:
+    return SummarizeJob(
+        id=row["id"],
+        email_ids=json.loads(row["email_ids"]),
+        summary=row["summary"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
 
 
 def _row_to_email(row: sqlite3.Row) -> Email:

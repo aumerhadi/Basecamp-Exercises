@@ -66,6 +66,9 @@ EMAILS_DB_PATH=/tmp/scratch.db uvicorn app.main:app --port 8000
 | GET    | `/emails`           | All e-mails, newest first. `?q=` searches subject + body, `?priority=` filters. Trailing slash also works. |
 | GET    | `/emails/{id}`      | One e-mail; `404` if the id is unknown.                       |
 | GET    | `/emails/summarize` | Summary of the matching e-mails. Accepts `q`, `priority`, `ids`. **Stub** — see below. |
+| POST   | `/summarize`        | Queue a summarization job for a list of e-mail ids; returns its id. |
+| GET    | `/summarize`        | Queued jobs still waiting for a summary. Trailing slash also works. |
+| GET    | `/summarize/{id}`   | That job's `summary`; `404` if the id is unknown.              |
 | GET    | `/health`           | Liveness probe.                                               |
 
 `/emails/summarize` is registered before `/emails/{id}` so the path parameter
@@ -133,14 +136,51 @@ Unicode-aware and treats `%` and `_` in a query as literal characters.
 `"summary": null, "status": "not_implemented"`. Fill in the function body — the
 router needs no changes once it returns a string.
 
+### Summarization queue
+
+`/summarize` is the asynchronous route: a request is *queued* rather than
+answered, and the summary is fetched later by id.
+
+```bash
+curl -X POST http://localhost:8000/summarize \
+     -H 'Content-Type: application/json' -d '[1, 2, 3]'
+# 201 {"id":1}
+
+curl http://localhost:8000/summarize        # jobs still awaiting a summary
+# [{"id":1,"emailIds":[1,2,3],"summary":null,"createdAt":"2026-07-28T21:42:38.722385Z"}]
+
+curl http://localhost:8000/summarize/1      # {"id":1,"summary":null} until filled in
+```
+
+The body is a plain JSON array of e-mail ids; an empty array is a `422`. Rows
+land in the `summarize_queue` table with `summary` NULL, and `GET /summarize`
+lists exactly those — a job counts as pending while `summary` is NULL *or* the
+empty string, so a worker cannot make one vanish by writing `''`. Ids are not
+checked against the `emails` table at enqueue time.
+
+Nothing drains the queue yet: writing the summaries is the missing half, and
+until it exists `GET /summarize/{id}` keeps returning `null` for a known id.
+
+| Column       | Type                          |
+| ------------ | ----------------------------- |
+| `id`         | INTEGER, auto-assigned rowid   |
+| `email_ids`  | TEXT — JSON array of ids       |
+| `summary`    | TEXT, nullable                 |
+| `created_at` | TEXT — ISO-8601 UTC timestamp  |
+
+`email_ids` is JSON because SQLite has no list type and the queue only ever
+reads the set back whole; `created_at` is ISO for the same sortability reason as
+`emails.sent_at`.
+
 ## Layout
 
 ```
 app/
   main.py            FastAPI app, lifespan schema bootstrap, CORS (http://localhost:3000)
   db.py              SQLite path, connection factory, schema
-  models.py          Email / EmailSummary / ImportResult contract
-  repository.py      SQL queries and upsert
+  models.py          Email / EmailSummary / ImportResult / SummarizeJob contract
+  repository.py      SQL queries and upsert, for both tables
   summarizer.py      summarization stub
-  routers/emails.py  /emails routes
+  routers/emails.py     /emails routes
+  routers/summarize.py  /summarize queue routes
 ```

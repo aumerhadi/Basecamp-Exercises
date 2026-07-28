@@ -85,3 +85,33 @@ class EmailSummary(BaseModel):
         description="Generated summary; null while the summariser is a stub.",
     )
     status: Literal["ok", "not_implemented"] = "not_implemented"
+
+
+class SummarizeJob(BaseModel):
+    """A row of the `summarize_queue` table."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int = Field(examples=[1], description="Summarization id.")
+    email_ids: list[int] = Field(alias="emailIds", examples=[[1, 2, 3]])
+    summary: str | None = Field(
+        default=None,
+        description="Generated summary; null or empty while the job is pending.",
+    )
+    created_at: datetime = Field(alias="createdAt")
+
+
+class SummarizeJobCreated(BaseModel):
+    """Result of `POST /summarize` — the id to poll for the summary."""
+
+    id: int = Field(examples=[1], description="Summarization id.")
+
+
+class SummarizeJobSummary(BaseModel):
+    """Result of `GET /summarize/{id}` — the queued job's `summary` field."""
+
+    id: int = Field(examples=[1], description="Summarization id.")
+    summary: str | None = Field(
+        default=None,
+        description="Generated summary; null or empty while the job is pending.",
+    )
