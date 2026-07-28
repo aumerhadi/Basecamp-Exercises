@@ -1,13 +1,13 @@
-"""SQLite-backed stores: the e-mail table and the summarization queue."""
+"""SQLite-backed stores: e-mails, the summarization queue, the agenda queue."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
 from collections.abc import Iterable, Sequence
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from .models import Email, Priority, SummarizeJob
+from .models import Agenda, Email, Priority, SummarizeJob
 
 COLUMNS = (
     "id, sender, recipient, subject, body, priority, date, time, high_priority, sent_at"
@@ -147,6 +147,102 @@ class SummarizeQueueRepository:
             f"SELECT {QUEUE_COLUMNS} FROM summarize_queue WHERE id = ?", (job_id,)
         ).fetchone()
         return _row_to_job(row) if row is not None else None
+
+    def submit_summary(self, job_id: int, summary: str) -> SummarizeJob | None:
+        """Write `summary` onto a job, taking it out of the pending listing.
+
+        Returns the updated job, or `None` when there is no job with that id.
+        """
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE summarize_queue SET summary = ? WHERE id = ?", (summary, job_id)
+            )
+        # rowcount counts rows matched, so re-submitting identical text still
+        # reports a hit rather than looking like a missing job.
+        if cursor.rowcount == 0:
+            return None
+        return self.get(job_id)
+
+
+AGENDA_COLUMNS = "day, date, email_ids, meeting, support"
+
+AGENDA_UPSERT = """
+INSERT INTO agenda_queue (day, date, email_ids, meeting, support, created_at)
+VALUES (:day, :date, :email_ids, :meeting, :support, :created_at)
+ON CONFLICT(day) DO UPDATE SET
+    date      = excluded.date,
+    email_ids = excluded.email_ids,
+    meeting   = excluded.meeting,
+    support   = excluded.support
+"""
+# created_at is left out of the UPDATE on purpose: it records when the day's
+# plan was first stored, not when it was last replaced.
+
+
+class AgendaRepository:
+    """Queries over the `agenda_queue` table. One instance per connection.
+
+    The table stores e-mail ids; `top` is resolved through the `emails` table on
+    the way out, so an agenda always reflects the current inbox.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+        self._emails = EmailRepository(connection)
+
+    def missing_email_ids(self, email_ids: Sequence[int]) -> list[int]:
+        """Which of `email_ids` are not in the inbox — empty when all are."""
+        if not email_ids:
+            return []
+        found = {email.id for email in self._emails.list(ids=email_ids)}
+        return [email_id for email_id in email_ids if email_id not in found]
+
+    def save(
+        self,
+        when: datetime,
+        email_ids: Sequence[int],
+        meeting: str,
+        support: str,
+    ) -> Agenda:
+        """Store the plan for `when`'s day, replacing any plan already there."""
+        with self._connection:
+            self._connection.execute(
+                AGENDA_UPSERT,
+                {
+                    "day": when.date().isoformat(),
+                    "date": when.isoformat(),
+                    "email_ids": json.dumps(list(email_ids)),
+                    "meeting": meeting,
+                    "support": support,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        return Agenda(
+            top=self._resolve(email_ids),
+            meeting=meeting,
+            support=support,
+            date=when,
+        )
+
+    def get(self, day: date) -> Agenda | None:
+        row = self._connection.execute(
+            f"SELECT {AGENDA_COLUMNS} FROM agenda_queue WHERE day = ?", (day.isoformat(),)
+        ).fetchone()
+        if row is None:
+            return None
+        return Agenda(
+            top=self._resolve(json.loads(row["email_ids"])),
+            meeting=row["meeting"],
+            support=row["support"],
+            date=datetime.fromisoformat(row["date"]),
+        )
+
+    def _resolve(self, email_ids: Sequence[int]) -> list[Email]:
+        """Ids to e-mails, in the stored order — `list()` sorts by date instead."""
+        by_id = {email.id: email for email in self._emails.list(ids=email_ids)}
+        # POST rejects unknown ids, so a gap here means the e-mail left the inbox
+        # after the plan was stored; skip it rather than fail the whole read.
+        return [by_id[email_id] for email_id in email_ids if email_id in by_id]
 
 
 def _row_to_job(row: sqlite3.Row) -> SummarizeJob:

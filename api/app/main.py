@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
-from .routers import emails, summarize
+from .routers import agenda, emails, summarize
 
 # The Next.js client in ../client runs on :3000 during development.
 CORS_ORIGINS = [
@@ -46,6 +46,7 @@ app.add_middleware(
 
 app.include_router(emails.router)
 app.include_router(summarize.router)
+app.include_router(agenda.router)
 
 
 @app.get("/health", tags=["meta"], summary="Liveness probe")
