@@ -1,6 +1,7 @@
 # E-mail API
 
-Read-only FastAPI backend over an inbox of e-mails.
+FastAPI backend over an inbox of e-mails, stored in SQLite and populated by
+importing a JSON file.
 
 ## Run
 
@@ -15,6 +16,7 @@ Interactive docs: <http://localhost:8000/docs>
 
 | Method | Path                | Notes                                                       |
 | ------ | ------------------- | ----------------------------------------------------------- |
+| POST   | `/emails/import`    | Multipart upload of a JSON file. See below.                   |
 | GET    | `/emails`           | All e-mails, newest first. `?q=` searches subject + body, `?priority=` filters. Trailing slash also works. |
 | GET    | `/emails/{id}`      | One e-mail; `404` if the id is unknown.                       |
 | GET    | `/emails/summarize` | Summary of the matching e-mails. Accepts `q`, `priority`, `ids`. **Stub** — see below. |
@@ -41,15 +43,37 @@ does not swallow it.
 
 - `priority` is one of `low` / `medium` / `critical`.
 - `date` is `DD-Mon-YYYY`, `time` is 24-hour `HH:MM`.
-- `highPriority` is optional in the source data — when absent it is derived as
-  `priority == "critical"`.
+- `highPriority` is optional — when absent it is derived as `priority == "critical"`.
+- `id` is **required**: it is the key the importer upserts on.
 
-## Data source
+## Import
 
-E-mails are loaded once at startup from `data/emails.json` (a JSON array of the
-objects above). Set `EMAILS_DATA_FILE` to point elsewhere. **There is no seed
-file yet** — until one exists the API answers `200` with an empty list, so
-clients can be built against it today.
+```bash
+curl -F "file=@emails.json" http://localhost:8000/emails/import
+# {"received":12,"inserted":10,"updated":2,"emailIds":[...]}
+```
+
+The file holds a JSON array of the objects above (a single object is also
+accepted). Behaviour worth knowing:
+
+- **Upsert by id** — an id already in the database is overwritten, so importing
+  the same file twice is idempotent. Duplicate ids *within* one file resolve to
+  the last occurrence.
+- **All or nothing** — every item is validated before anything is written. One
+  bad item means a `422` naming its index and field, and no rows change.
+- `400` for malformed JSON, `413` above 5 MB.
+
+## Storage
+
+SQLite, at `../data/emails.db` relative to this folder (the repo-root `data/`
+folder). The file and its schema are created on startup; the database is
+gitignored. Point `EMAILS_DB_PATH` elsewhere to override.
+
+Alongside the contract fields the table keeps a derived `sent_at` column holding
+an ISO timestamp: `DD-Mon-YYYY` does not sort lexicographically, so ordering
+"newest first" needs a sortable copy. Search uses a `casefold` SQL function
+registered on the connection rather than plain `LIKE`, which keeps matching
+Unicode-aware and treats `%` and `_` in a query as literal characters.
 
 ## Summarization
 
@@ -62,10 +86,10 @@ router needs no changes once it returns a string.
 
 ```
 app/
-  main.py            FastAPI app, CORS (defaults to http://localhost:3000)
-  models.py          Email / EmailSummary contract
-  repository.py      in-memory store + search
+  main.py            FastAPI app, lifespan schema bootstrap, CORS (http://localhost:3000)
+  db.py              SQLite path, connection factory, schema
+  models.py          Email / EmailSummary / ImportResult contract
+  repository.py      SQL queries and upsert
   summarizer.py      summarization stub
   routers/emails.py  /emails routes
-data/emails.json     seed data (not present yet)
 ```

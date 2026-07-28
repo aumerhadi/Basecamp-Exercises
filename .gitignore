@@ -10,3 +10,8 @@ key.env
 # Local environments / cruft
 .venv/
 .ipynb_checkpoints/
+
+# Local SQLite storage for the e-mail API (data/emails.db + WAL sidecars)
+data/*.db
+data/*.db-wal
+data/*.db-shm
